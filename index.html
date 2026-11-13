@@ -1,0 +1,374 @@
+<title>Loop Camera</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@600;700&display=swap">
+<style>
+/* Dark-first recording tool — low-glare for drawing sessions */
+:root {
+  --bg: #0c0e14; --sf: #161923; --sf2: #1e2230;
+  --fg: #e2e4ea; --dim: #7a7f91;
+  --ac: #6d8be8; --acs: rgba(109,139,232,.15);
+  --rec: #ef4444; --recs: rgba(239,68,68,.25);
+  --ok: #34d399; --oks: rgba(52,211,153,.15);
+  --r: 14px; --rs: 10px;
+  color-scheme: dark;
+}
+@media(prefers-color-scheme:light){:root:not([data-theme="dark"]){
+  --bg:#f4f5f7;--sf:#fff;--sf2:#eaecf0;--fg:#0c0e14;--dim:#6b7082;
+  --ac:#4a6fd4;--acs:rgba(74,111,212,.1);--rec:#dc2626;--recs:rgba(220,38,38,.12);
+  --ok:#16a34a;--oks:rgba(22,163,74,.1);color-scheme:light;
+}}
+:root[data-theme="light"]{
+  --bg:#f4f5f7;--sf:#fff;--sf2:#eaecf0;--fg:#0c0e14;--dim:#6b7082;
+  --ac:#4a6fd4;--acs:rgba(74,111,212,.1);--rec:#dc2626;--recs:rgba(220,38,38,.12);
+  --ok:#16a34a;--oks:rgba(22,163,74,.1);color-scheme:light;
+}
+
+body{background:var(--bg);color:var(--fg);font-family:'Inter',system-ui,sans-serif;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+  -webkit-user-select:none;user-select:none}
+h1,h2{font-family:'Space Grotesk',sans-serif}
+
+.app{max-width:460px;margin:0 auto;padding-block:16px;display:flex;flex-direction:column;gap:14px}
+
+/* Header */
+.hdr{display:flex;align-items:center;gap:10px}
+.hdr-icon{width:34px;height:34px;background:var(--ac);border-radius:8px;display:grid;place-items:center;font-size:16px;color:#fff;flex-shrink:0}
+.hdr h1{font-size:18px;font-weight:700;letter-spacing:-.01em;line-height:1.2}
+.hdr small{display:block;font-size:11px;color:var(--dim);font-weight:400;margin-top:2px}
+
+/* Camera box */
+.cam{position:relative;width:100%;aspect-ratio:4/3;background:var(--sf);border-radius:var(--r);overflow:hidden;cursor:pointer}
+.cam video{width:100%;height:100%;object-fit:cover;display:block}
+.cam-ph{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:var(--dim);font-size:13px;transition:opacity .3s}
+.cam-ph svg{width:40px;height:40px;opacity:.35}
+.cam.live .cam-ph{opacity:0;pointer-events:none}
+
+.badge{position:absolute;top:10px;left:10px;align-items:center;gap:5px;
+  background:rgba(0,0,0,.65);padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;color:#fff;
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:none}
+.badge.on{display:flex}
+.rec-dot{width:7px;height:7px;border-radius:50%;background:var(--rec);flex-shrink:0}
+.badge.on .rec-dot{animation:pulse 1s ease infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+.ovl{position:absolute;bottom:10px;left:10px;right:10px;
+  background:rgba(0,0,0,.65);padding:8px 12px;border-radius:var(--rs);
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);color:#fff;font-size:12px;display:none}
+.ovl.on{display:block}
+.ovl-row{display:flex;justify-content:space-between;align-items:center}
+.bar-t{height:3px;background:rgba(255,255,255,.18);border-radius:2px;margin-top:6px;overflow:hidden}
+.bar-f{height:100%;border-radius:2px;transition:width .4s linear;width:0}
+.bar-f.idle{background:var(--ac)}.bar-f.rec{background:var(--rec)}
+
+.btn-flip{position:absolute;top:10px;right:10px;width:34px;height:34px;border-radius:50%;border:none;
+  background:rgba(0,0,0,.45);color:#fff;font-size:18px;cursor:pointer;
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:none;place-items:center}
+.cam.live .btn-flip{display:grid}
+
+/* Settings */
+.card{background:var(--sf);border-radius:var(--r);padding:14px 16px}
+.settings{display:flex;flex-direction:column;gap:14px}
+.row{display:flex;align-items:center;justify-content:space-between}
+.lbl{font-size:13px;font-weight:500;line-height:1.3}
+.lbl small{display:block;font-size:11px;color:var(--dim);font-weight:400;margin-top:1px}
+.ctrl{display:flex;align-items:center;gap:6px}
+.ctrl button{width:30px;height:30px;border-radius:50%;border:none;background:var(--sf2);color:var(--fg);
+  font-size:16px;font-weight:600;cursor:pointer;display:grid;place-items:center;touch-action:manipulation;line-height:1}
+.ctrl button:active{background:var(--ac);color:#fff}
+.val{font-variant-numeric:tabular-nums;font-weight:600;font-size:15px;min-width:42px;text-align:center}
+
+/* Estimate */
+.est{display:flex;justify-content:space-between;font-size:12px;color:var(--dim);padding:10px 16px}
+.est strong{color:var(--fg);font-variant-numeric:tabular-nums}
+
+/* Buttons */
+.btn{width:100%;padding:14px;border:none;border-radius:var(--r);font-family:'Space Grotesk',sans-serif;
+  font-size:15px;font-weight:700;cursor:pointer;touch-action:manipulation;letter-spacing:.01em}
+.btn:active{transform:scale(.97)}
+.btn:disabled{opacity:.4;pointer-events:none}
+.btn-go{background:var(--ac);color:#fff;box-shadow:0 4px 16px var(--acs)}
+.btn-stp{background:var(--rec);color:#fff;box-shadow:0 4px 16px var(--recs)}
+.btn-dl{background:var(--ok);color:#fff;box-shadow:0 4px 12px var(--oks)}
+.btn-sec{background:var(--sf);color:var(--fg)}
+.btn-row{display:flex;gap:8px}.btn-row .btn{flex:1}
+
+/* Status */
+.sts{text-align:center;font-size:12px;color:var(--dim);min-height:18px;font-variant-numeric:tabular-nums}
+
+/* Result */
+#pResult video{width:100%;border-radius:var(--r);background:var(--sf)}
+.r-info{text-align:center;font-size:13px;color:var(--dim);margin-top:2px}
+.r-tip{background:var(--acs);border-radius:var(--rs);padding:10px 14px;font-size:12px;color:var(--ac);
+  text-align:center;line-height:1.6}
+
+/* Error */
+.err{background:var(--recs);border-radius:var(--r);padding:12px 14px;font-size:13px;color:var(--rec);text-align:center}
+
+@media(prefers-reduced-motion:reduce){
+  .rec-dot{animation:none}.btn{transition:none}.bar-f{transition:none}}
+</style>
+
+<div class="app">
+  <div class="hdr">
+    <div class="hdr-icon">⏺</div>
+    <div><h1>Loop Camera</h1><small>畫畫縮時攝影工具</small></div>
+  </div>
+
+  <div class="cam" id="cam" onclick="enableCamera()">
+    <video id="preview" autoplay playsinline muted></video>
+    <div class="cam-ph" id="camPh">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+      <div>點擊啟動相機</div>
+    </div>
+    <div class="badge" id="badge"><div class="rec-dot"></div><span id="badgeTxt">REC</span></div>
+    <div class="ovl" id="ovl">
+      <div class="ovl-row"><span id="ovlLeft"></span><span id="ovlRight"></span></div>
+      <div class="bar-t"><div class="bar-f" id="barF"></div></div>
+    </div>
+    <button class="btn-flip" onclick="flipCam(event)">⟲</button>
+  </div>
+
+  <div id="errBox" hidden></div>
+
+  <!-- SETUP -->
+  <div id="pSetup">
+    <div class="card settings">
+      <div class="row">
+        <div class="lbl">錄影間隔<small>每隔多久錄一次</small></div>
+        <div class="ctrl">
+          <button onclick="adj('interval',-5)">−</button>
+          <div class="val" id="vInt">30秒</div>
+          <button onclick="adj('interval',5)">+</button>
+        </div>
+      </div>
+      <div class="row">
+        <div class="lbl">每段長度<small>每次錄幾秒</small></div>
+        <div class="ctrl">
+          <button onclick="adj('duration',-1)">−</button>
+          <div class="val" id="vDur">3秒</div>
+          <button onclick="adj('duration',1)">+</button>
+        </div>
+      </div>
+      <div class="row">
+        <div class="lbl">錄影次數<small>總共錄幾段</small></div>
+        <div class="ctrl">
+          <button onclick="adj('count',-1)">−</button>
+          <div class="val" id="vCnt">15</div>
+          <button onclick="adj('count',1)">+</button>
+        </div>
+      </div>
+    </div>
+    <div class="card est" id="est"></div>
+    <button class="btn btn-go" id="btnGo" onclick="startRec()">▶ 開始錄影</button>
+  </div>
+
+  <!-- RECORDING -->
+  <div id="pRec" hidden>
+    <div class="sts" id="recSts"></div>
+    <button class="btn btn-stp" onclick="stopRec()">⏹ 停止錄影</button>
+  </div>
+
+  <!-- RESULT -->
+  <div id="pResult" hidden>
+    <video id="resVid" controls playsinline></video>
+    <div class="r-info" id="resInfo"></div>
+    <div class="r-tip">💡 點「儲存影片」下載，或長按影片選擇儲存</div>
+    <div class="btn-row">
+      <button class="btn btn-dl" onclick="saveVid()">💾 儲存影片</button>
+      <button class="btn btn-sec" onclick="reset()">🔄 重來</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+/* ── Settings ── */
+const S = { interval: 30, duration: 3, count: 15 };
+const LIM = { interval:[5,300], duration:[1,30], count:[1,99] };
+
+function adj(k, d) {
+  S[k] = Math.max(LIM[k][0], Math.min(LIM[k][1], S[k] + d));
+  renderSettings();
+}
+
+function fmtT(s) {
+  if (s < 60) return s + '秒';
+  const m = Math.floor(s/60), r = s%60;
+  return r ? m+'分'+r+'秒' : m+'分鐘';
+}
+
+function renderSettings() {
+  $('vInt').textContent = S.interval >= 60
+    ? Math.floor(S.interval/60)+'分'+(S.interval%60 ? S.interval%60+'秒':'')
+    : S.interval+'秒';
+  $('vDur').textContent = S.duration+'秒';
+  $('vCnt').textContent = S.count;
+  const total = S.duration*S.count + S.interval*Math.max(0, S.count-1);
+  const output = S.duration*S.count;
+  $('est').innerHTML = `<span>總錄製 <strong>${fmtT(total)}</strong></span><span>成品約 <strong>${fmtT(output)}</strong></span>`;
+}
+
+/* ── Camera ── */
+let stream = null, useFront = false;
+
+async function enableCamera() {
+  if (stream) return true;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: useFront?'user':'environment', width:{ideal:1920}, height:{ideal:1080} },
+      audio: false
+    });
+    $('preview').srcObject = stream;
+    $('cam').classList.add('live');
+    hideErr();
+    return true;
+  } catch(e) {
+    const msg = e.name === 'NotAllowedError' ? '請允許相機權限後重試' :
+      e.name === 'NotFoundError' ? '找不到相機裝置' :
+      (e.name === 'NotSupportedError' || e.message?.includes('secure'))
+        ? '需要 HTTPS 環境才能使用相機。請透過 claude.ai 的 Artifact 連結開啟，或用 localhost 伺服器存取。'
+        : '相機錯誤：'+e.message;
+    showErr(msg);
+    return false;
+  }
+}
+
+function flipCam(e) {
+  e.stopPropagation();
+  useFront = !useFront;
+  if (stream) { stream.getTracks().forEach(t=>t.stop()); stream = null; }
+  $('cam').classList.remove('live');
+  enableCamera();
+}
+
+function showErr(msg) { $('errBox').hidden=false; $('errBox').className='err'; $('errBox').textContent=msg; }
+function hideErr() { $('errBox').hidden=true; }
+
+/* ── Recording ── */
+let recorder = null, chunks = [], running = false, wl = null, blob = null;
+
+async function startRec() {
+  if (!stream && !(await enableCamera())) return;
+
+  running = true; chunks = []; blob = null;
+  try { wl = await navigator.wakeLock.request('screen'); } catch(e){}
+
+  $('pSetup').hidden = true;
+  $('pRec').hidden = false;
+  $('pResult').hidden = true;
+
+  const types = ['video/mp4;codecs=avc1','video/mp4','video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'];
+  const mime = types.find(t => MediaRecorder.isTypeSupported(t)) || '';
+  const opts = { videoBitsPerSecond: 5_000_000 };
+  if (mime) opts.mimeType = mime;
+
+  recorder = new MediaRecorder(stream, opts);
+  recorder.ondataavailable = e => { if(e.data.size) chunks.push(e.data); };
+  recorder.start(500);
+
+  for (let i = 0; i < S.count && running; i++) {
+    if (i > 0) {
+      recorder.pause();
+      $('badge').classList.remove('on');
+      await tick(S.interval, false, i);
+      if (!running) break;
+      recorder.resume();
+    }
+    $('badge').classList.add('on');
+    $('badgeTxt').textContent = `REC ${i+1}/${S.count}`;
+    await tick(S.duration, true, i);
+  }
+
+  $('badge').classList.remove('on');
+  $('ovl').classList.remove('on');
+
+  if (recorder.state !== 'inactive') {
+    await new Promise(r => { recorder.onstop = r; recorder.stop(); });
+  }
+  try { wl?.release(); wl=null; } catch(e){}
+
+  if (chunks.length) {
+    blob = new Blob(chunks, { type: recorder.mimeType||'video/webm' });
+    $('resVid').src = URL.createObjectURL(blob);
+    const mb = (blob.size/1048576).toFixed(1);
+    $('resInfo').textContent = `影片大小：${mb} MB`;
+    $('cam').hidden = true;
+    $('pRec').hidden = true;
+    $('pResult').hidden = false;
+  } else { reset(); }
+  running = false;
+}
+
+function tick(sec, isRec, idx) {
+  return new Promise(resolve => {
+    let left = sec;
+    const bar = $('barF');
+    bar.className = 'bar-f '+(isRec?'rec':'idle');
+    $('ovl').classList.add('on');
+
+    const draw = () => {
+      if (isRec) {
+        $('ovlLeft').textContent = `錄影中 ${idx+1}/${S.count}`;
+        $('ovlRight').textContent = left+'s';
+        $('recSts').textContent = `正在錄第 ${idx+1} 段，共 ${S.count} 段`;
+      } else {
+        $('ovlLeft').textContent = `等待中`;
+        $('ovlRight').textContent = left+'s → 第'+(idx+1)+'段';
+        $('recSts').textContent = `已完成 ${idx}/${S.count} 段`;
+      }
+      bar.style.width = ((sec-left)/sec*100)+'%';
+    };
+    draw();
+
+    const iv = setInterval(()=>{
+      left--;
+      if (left<=0 || !running) { clearInterval(iv); bar.style.width='100%'; resolve(); }
+      else draw();
+    }, 1000);
+  });
+}
+
+function stopRec() { running = false; }
+
+let dlApi = null;
+(async()=>{ try { dlApi = await window.claude?.use?.("downloads"); } catch(e){} })();
+
+async function saveVid() {
+  if (!blob) return;
+  const ext = blob.type.includes('mp4')?'mp4':'webm';
+  const name = 'loop-cam-'+new Date().toISOString().slice(0,10)+'.'+ext;
+
+  // Artifact downloads API
+  if (dlApi) {
+    try { await dlApi.save({filename:name, data:blob}); return; } catch(e){}
+  }
+
+  // Web Share API (works well on mobile)
+  try {
+    const file = new File([blob], name, {type: blob.type});
+    if (navigator.canShare?.({files:[file]})) {
+      await navigator.share({files:[file]});
+      return;
+    }
+  } catch(e){}
+
+  // Fallback: download link
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+
+function reset() {
+  $('cam').hidden = false;
+  $('pSetup').hidden = false;
+  $('pRec').hidden = true;
+  $('pResult').hidden = true;
+  blob = null; running = false;
+  if (!stream) enableCamera();
+}
+
+renderSettings();
+</script>
